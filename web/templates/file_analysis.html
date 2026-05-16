@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}File Analysis – FIM{% endblock %}
+{% block title %}File Analysis – IntegrityEye{% endblock %}
 {% block head %}
 <style>
-/* ── Search bar ─────────────────────────────────────────── */
+
 .fa-search-row {
     display: flex;
     gap: 10px;
@@ -42,7 +42,6 @@
     margin-bottom: 12px;
 }
 
-/* ── Path results list ──────────────────────────────────── */
 .fa-path-list {
     background: var(--bg-row-alt);
     border: 1px solid var(--border);
@@ -88,7 +87,6 @@
     text-align: center;
 }
 
-/* ── Pagination ─────────────────────────────────────────── */
 .fa-pagination {
     display: flex;
     align-items: center;
@@ -110,7 +108,6 @@
 .fa-page-btn.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .fa-page-btn.disabled { opacity: 0.35; pointer-events: none; }
 
-/* ── Detail section (stacked) ───────────────────────────── */
 .fa-divider {
     border: none; border-top: 1px solid var(--border);
     margin: 4px 0 24px;
@@ -151,7 +148,6 @@
 }
 .fa-attr-tile.hash-tile { grid-column: span 2; }
 
-/* Event badges */
 .ev-badge {
     padding: 3px 9px; border-radius: 5px;
     font-size: 0.7rem; font-weight: 700;
@@ -166,7 +162,6 @@
     Search tracked files, then click one to inspect its original baseline and full change history.
 </p>
 
-<!-- ── Search bar ────────────────────────────────────────── -->
 <form method="get" action="{{ url_for('routes.file_analysis') }}" class="fa-search-row">
     {% if selected_path %}<input type="hidden" name="path" value="{{ selected_path }}">{% endif %}
     <input type="text" name="search" class="fa-search-input"
@@ -177,7 +172,6 @@
     {% endif %}
 </form>
 
-<!-- ── Count ─────────────────────────────────────────────── -->
 <div class="fa-count">
     {% if search %}
         {{ total }} result{{ 's' if total != 1 else '' }} for "<strong style="color:var(--text);">{{ search }}</strong>"
@@ -186,7 +180,6 @@
     {% endif %}
 </div>
 
-<!-- ── Path list ─────────────────────────────────────────── -->
 <div class="fa-path-list">
     {% for p in page_paths %}
     <a href="{{ url_for('routes.file_analysis', path=p, search=search, page=page) }}"
@@ -200,7 +193,6 @@
     {% endfor %}
 </div>
 
-<!-- ── Pagination ────────────────────────────────────────── -->
 {% if total_pages > 1 %}
 <div class="fa-pagination">
     <span>Page {{ page }} of {{ total_pages }}</span>
@@ -225,12 +217,10 @@
 <div style="margin-bottom:28px;"></div>
 {% endif %}
 
-<!-- ── Detail (shown only when a path is selected) ───────── -->
 {% if selected_path %}
 
 <hr class="fa-divider">
 
-<!-- Selected path heading -->
 <div class="fa-section-label">SELECTED FILE</div>
 <div class="fa-path-heading">
     <span>{{ selected_path }}</span>
@@ -241,7 +231,6 @@
     {% endif %}
 </div>
 
-<!-- Baseline attribute tiles -->
 {% if file_attrs %}
 <div class="fa-section-label">ORIGINAL BASELINE ATTRIBUTES</div>
 <div class="fa-attr-grid">
@@ -285,7 +274,6 @@
 <p style="color:var(--text-muted);margin-bottom:24px;">No baseline entry found — this file may have been removed from monitoring.</p>
 {% endif %}
 
-<!-- Change history table -->
 <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px;">
     <div class="fa-section-label" style="margin:0;">CHANGE HISTORY</div>
     <span style="font-size:0.8125rem;color:var(--text-muted);">{{ history|length }} event{{ 's' if history|length != 1 else '' }}</span>
@@ -381,7 +369,6 @@
 {% endif %}
 
 {% else %}
-<!-- Empty state — no file selected yet -->
 <hr class="fa-divider">
 <div class="card" style="padding:52px 32px;text-align:center;">
     <div style="font-size:2.5rem;margin-bottom:14px;">📁</div>
