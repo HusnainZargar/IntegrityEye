@@ -5,55 +5,70 @@ import os
 import sys
 
 
-# ─────────────────────────────────────────────────────────────
-#  Helpers
-# ─────────────────────────────────────────────────────────────
+
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+GREEN  = "\033[92m"
+CYAN   = "\033[96m"
+YELLOW = "\033[93m"
+RED    = "\033[91m"
+BLUE   = "\033[94m"
+MAGENTA= "\033[95m"
+WHITE  = "\033[97m"
+DIM    = "\033[2m"
+
+
+def c(color, text):
+    """Wrap text in an ANSI color + reset."""
+    return f"{color}{text}{RESET}"
+
+
 
 def banner():
     print()
-    print("  ███████╗██╗███╗   ███╗")
-    print("  ██╔════╝██║████╗ ████║")
-    print("  █████╗  ██║██╔████╔██║")
-    print("  ██╔══╝  ██║██║╚██╔╝██║")
-    print("  ██║     ██║██║ ╚═╝ ██║")
-    print("  ╚═╝     ╚═╝╚═╝     ╚═╝")
-    print("  File Integrity Monitoring System")
-    print("  v0.5.0-alpha\n")
+    print(c(CYAN,   "  ██╗███╗   ██╗████████╗███████╗ ██████╗ ██████╗ ██╗████████╗██╗   ██╗███████╗██╗   ██╗███████╗"))
+    print(c(CYAN,   "  ██║████╗  ██║╚══██╔══╝██╔════╝██╔════╝ ██╔══██╗██║╚══██╔══╝╚██╗ ██╔╝██╔════╝╚██╗ ██╔╝██╔════╝"))
+    print(c(BLUE,   "  ██║██╔██╗ ██║   ██║   █████╗  ██║  ███╗██████╔╝██║   ██║    ╚████╔╝ █████╗   ╚████╔╝ █████╗  "))
+    print(c(BLUE,   "  ██║██║╚██╗██║   ██║   ██╔══╝  ██║   ██║██╔══██╗██║   ██║     ╚██╔╝  ██╔══╝    ╚██╔╝  ██╔══╝  "))
+    print(c(MAGENTA,"  ██║██║ ╚████║   ██║   ███████╗╚██████╔╝██║  ██║██║   ██║      ██║   ███████╗   ██║   ███████╗"))
+    print(c(MAGENTA,"  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝   ╚══════╝   ╚═╝   ╚══════╝"))
+    print()
+    print(c(WHITE,  "  " + BOLD + "IntegrityEye" + RESET + c(DIM, "  —  Real-time file integrity and metadata monitoring")))
+    print(c(WHITE,    "  v1.0.0"))
+    print(c(WHITE,  "  " + BOLD + "Author: " + RESET + "Muhammad Husnain Zargar"))
+    print()
 
 
 def step(n, msg):
-    print(f"  [STEP {n}] {msg}")
+    print(f"  {c(CYAN, f'[STEP {n}]')}  {msg}")
 
 
 def info(msg):
-    print(f"  [INFO]  {msg}")
+    print(f"  {c(CYAN, '[INFO] ')}  {msg}")
 
 
 def ok(msg):
-    print(f"  [ OK ]  {msg}")
+    print(f"  {c(GREEN, '[ OK ] ')}  {msg}")
 
 
 def warn(msg):
-    print(f"  [WARN]  {msg}")
+    print(f"  {c(YELLOW, '[WARN] ')}  {msg}")
 
 
 def err(msg):
-    print(f"  [ERR ]  {msg}")
+    print(f"  {c(RED, '[ERR ] ')}  {msg}")
 
 
 def separator():
-    print("  " + "─" * 54)
+    print("  " + c(DIM, "─" * 60))
 
 
-# ─────────────────────────────────────────────────────────────
-#  Systemd setup  (always runs on first/direct invocation)
-# ─────────────────────────────────────────────────────────────
 
 def setup_systemd_service(directory=None):
     separator()
     step(1, "Writing systemd unit file…")
 
-    service_file = '/etc/systemd/system/fim.service'
+    service_file = '/etc/systemd/system/integrityeye.service'
     project_dir  = os.path.dirname(os.path.abspath(__file__))
     main_py_path = os.path.join(project_dir, 'main.py')
     exec_start = f"/usr/bin/python3 {main_py_path}"
@@ -61,7 +76,7 @@ def setup_systemd_service(directory=None):
         exec_start += f" {directory}"
 
     service_content = f"""[Unit]
-Description=File Integrity Monitoring System
+Description=IntegrityEye — File Integrity Monitoring System
 After=network.target
 
 [Service]
@@ -77,7 +92,7 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
-    tmp = os.path.join(project_dir, 'fim.service')
+    tmp = os.path.join(project_dir, 'integrityeye.service')
     with open(tmp, 'w') as f:
         f.write(service_content)
 
@@ -90,50 +105,62 @@ WantedBy=multi-user.target
     ok("Daemon reloaded.")
 
     step(3, "Enabling service (auto-start on boot)…")
-    subprocess.run(['systemctl', 'enable', 'fim'], check=True)
+    subprocess.run(['systemctl', 'enable', 'integrityeye'], check=True)
     ok("Service enabled.")
 
     step(4, "Starting service now…")
-    subprocess.run(['systemctl', 'start', 'fim'], check=True)
+    subprocess.run(['systemctl', 'start', 'integrityeye'], check=True)
     ok("Service started.")
 
     separator()
     print()
-    print("  ┌─────────────────────────────────────────────┐")
-    print("  │                                             │")
-    print("  │   FIM is running as a systemd service.      │")
-    print("  │                                             │")
-    print("  │   Dashboard →  http://localhost:5000        │")
-    print("  │   Credentials: admin / admin                │")
-    print("  │                                             │")
-    print("  │   Useful commands:                          │")
-    print("  │     systemctl status fim                    │")
-    print("  │     journalctl -u fim -f                    │")
-    print("  │     systemctl stop fim                      │")
-    print("  │     systemctl restart fim                   │")
-    print("  │                                             │")
-    print("  └─────────────────────────────────────────────┘")
+    print("  " + c(GREEN, "┌─────────────────────────────────────────────────────┐"))
+    print("  " + c(GREEN, "│                                                     │"))
+    print("  " + c(GREEN, "│") + c(WHITE, "   IntegrityEye is running as a systemd service.     ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│                                                     │"))
+    print("  " + c(GREEN, "│") + c(CYAN,  "   Dashboard  →  http://localhost:5000               ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│") + c(DIM,   "   Credentials:  admin / admin                       ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│                                                     │"))
+    print("  " + c(GREEN, "│") + c(WHITE, "   Useful commands:                                  ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│") + c(DIM,   "     systemctl status integrityeye                   ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│") + c(DIM,   "     journalctl -u integrityeye -f                   ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│") + c(DIM,   "     systemctl stop integrityeye                     ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│") + c(DIM,   "     systemctl restart integrityeye                  ") + c(GREEN, "│"))
+    print("  " + c(GREEN, "│                                                     │"))
+    print("  " + c(GREEN, "└─────────────────────────────────────────────────────┘"))
     print()
     sys.exit(0)
 
 
-# ─────────────────────────────────────────────────────────────
-#  Entry point
-# ─────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="File Integrity Monitoring System — initial setup / service runner"
+        prog='integrityeye',
+        description=(
+            "IntegrityEye — Real-time file integrity and metadata monitoring.\n\n"
+            "USAGE\n"
+            "  sudo python3 main.py [/path/to/monitor]\n\n"
+            "FIRST RUN\n"
+            "  Run as root to install and start the systemd service.\n"
+            "  Add more paths to monitor from the web UI Settings page.\n\n"
+            "USEFUL COMMANDS (after install)\n"
+            "  systemctl status integrityeye\n"
+            "  journalctl -u integrityeye -f\n"
+            "  systemctl restart integrityeye\n"
+            "  systemctl stop integrityeye\n\n"
+            "DASHBOARD\n"
+            "  http://localhost:5000   (default credentials: admin / admin)\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         'directory', type=str, nargs='?', default=None,
-        help="Optional path to monitor immediately (can also add paths from the web UI)"
+        help="Optional path to monitor on first start (can also add from the web UI)"
     )
     args = parser.parse_args()
     running_under_systemd = os.getenv('INVOCATION_ID') is not None
 
     if not running_under_systemd:
-        # ── Direct invocation (terminal) ──────────────────────
 
         banner()
         separator()
@@ -141,8 +168,8 @@ if __name__ == '__main__':
         # Require root
         if os.geteuid() != 0:
             warn("This script must run as root to install the systemd service.")
-            warn("Re-run with:  sudo python3 main.py" +
-                 (f" {args.directory}" if args.directory else ""))
+            warn("Re-run with:  " + c(CYAN, "sudo python3 main.py") +
+                 (c(CYAN, f" {args.directory}") if args.directory else ""))
             print()
             sys.exit(1)
 
@@ -151,9 +178,10 @@ if __name__ == '__main__':
             if not os.path.exists(path):
                 err(f"Path does not exist: {path}")
                 sys.exit(1)
-            info(f"Path to monitor on first start: {path}")
+            info(f"Path to monitor on first start: {c(CYAN, path)}")
         else:
-            info("No path supplied — add monitored paths from the web UI Settings page.")
+            info("No path supplied — add monitored paths from the " +
+                 c(CYAN, "web UI → Settings") + " page.")
 
         separator()
         print()
@@ -161,7 +189,6 @@ if __name__ == '__main__':
         setup_systemd_service(args.directory)
 
     else:
-        # ── Running as systemd service ─────────────────────────
 
         import logging
         from components.utils import get_config, set_config, add_settings_audit, init_db
