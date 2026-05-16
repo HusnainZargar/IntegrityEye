@@ -1,9 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Logs – FIM{% endblock %}
+{% block title %}Logs – IntegrityEye{% endblock %}
 {% block content %}
 <h1>📜 Logs</h1>
 
-<!-- Search bar -->
 <form method="get" action="{{ url_for('routes.show_logs') }}" class="search-bar">
     <input type="text" name="search" class="search-input"
            placeholder="Search logs…" value="{{ search }}">
@@ -62,8 +61,6 @@
         {% endfor %}
         </tbody>
     </table>
-
-    <!-- Pagination -->
     <div class="pagination">
         <span>Showing {{ logs|length }} of {{ total }} entr{{ 'ies' if total != 1 else 'y' }}
             {% if search %} matching "{{ search }}"{% endif %}
