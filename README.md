@@ -1,21 +1,17 @@
-# File Integrity Monitoring (FIM) System for Linux
+# IntegrityEye
  
 [![Python](https://img.shields.io/badge/Python-3.x-blue)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Linux-orange)](https://linux.org)
 [![Framework](https://img.shields.io/badge/Web-Flask-lightgrey)](https://flask.palletsprojects.com)
-[![Status](https://img.shields.io/badge/Status-Under%20Development-yellow)]()
-[![Release](https://img.shields.io/badge/Release-v0.5.0--alpha-blueviolet)]()
+[![License](https://img.shields.io/badge/License-MIT-green)]()
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen)]()
+[![Status](https://img.shields.io/badge/Status-Production-brightgreen)]()
  
-> **Status:** 🚧 Under Development &nbsp;|&nbsp; **Release:** v0.5.0-alpha
+> **Real-time file integrity and metadata monitoring for Linux — with a full web dashboard.**
  
----
+IntegrityEye is a host-based file integrity monitoring (FIM) system built for Linux. It uses kernel-level `inotify` events to detect file changes the moment they happen — no polling, no delays. Every monitored path gets a cryptographic baseline snapshot, and any deviation in content, permissions, ownership, or metadata fires a classified alert.
  
-## Overview
- 
-A lightweight **File Integrity Monitoring (FIM)** tool for Linux that detects real-time file content and metadata changes using kernel-level notifications.
-Built for **learning, research, and security tooling demonstrations**, with a modern dark-themed web dashboard.
- 
-Runs as a **systemd service** — persistent across reboots, manageable via `systemctl`.
+Runs persistently as a **systemd service** and exposes a dark-themed **Flask web dashboard** for live monitoring, alert triage, forensic analysis, and configuration — all from the browser.
  
 ---
  
@@ -39,6 +35,12 @@ Runs as a **systemd service** — persistent across reboots, manageable via `sys
 - **SQLite storage** — zero external dependencies for persistence
  
 ---
+
+### Classification
+- Four severity levels: **Critical** (SUID / ownership changes), **High** (file deletion, content modification), **Medium** (new files, size changes), **Low** (timestamp changes, renames)
+- Event types: `modified`, `permission_change`, `ownership_change`, `suid_change`, `size_change`, `timestamp_change`, `created`, `deleted`, `moved`
+
+---
  
 ## Tech Stack
  
@@ -59,8 +61,8 @@ Runs as a **systemd service** — persistent across reboots, manageable via `sys
  
 ```bash
 # Clone the repo
-git clone https://github.com/HusnainZargar/File-Integrity-Monitoring-System.git
-cd File-Integrity-Monitoring-System
+git clone https://github.com/HusnainZargar/IntegrityEye.git
+cd IntegrityEye
  
 # Install dependencies
 pip install flask pyinotify werkzeug
@@ -134,42 +136,38 @@ journalctl -u fim -f        # live logs
 ```
  
 ---
+
+## Scope
  
-## Current Scope (v0.5.0-alpha)
- 
-✔ Linux-only, single-host monitoring  
-✔ Systemd service with auto-start  
-✔ Immutable baseline — original never overwritten  
-✔ Per-file change history (append-only)  
-✔ File Analysis + Statistics pages  
-✔ Paginated logs, alerts, and file browser with search  
-✔ Secure password hashing (PBKDF2 via werkzeug)  
-✔ Event debouncing  
-✔ Logout and restart confirmation modals  
- 
-❌ No email / push notifications  
-❌ No encrypted baseline  
-❌ No distributed / multi-host agents  
-❌ No role-based access control  
- 
----
- 
-## Planned Enhancements
- 
-- Email alerts on critical events
+### What it does
+- Linux-only, single-host monitoring
+- Systemd service with auto-start on boot
+- Immutable baseline — original attributes locked at capture
+- Per-file change history — append-only forensic log
+- Alert deduplication across restarts
+- Full web dashboard with live metrics
+- Paginated logs, alerts, and file browser with search
+- File Analysis — baseline diff and change timeline per file
+- Statistics — drift percentage, most-changed files, hourly heatmap
+- Secure PBKDF2 password hashing
+- Event debouncing
+- Exclusion list, hidden file filtering, recursive monitoring toggle
+### What it doesn't do (yet)
+- Email or push notifications
 - Encrypted baseline storage
-- Cross-platform support
-- Role-based authentication
- 
+- Multi-host / distributed agents
+- Role-based access control
+- Windows or macOS support
 ---
  
-## Use Case
+## Use Cases
  
-- Host-based intrusion detection learning
-- Linux file system monitoring practice
-- Academic cybersecurity projects
-- Security tooling demonstrations and home-lab setups
- 
+- **HIDS learning** — understand how host-based intrusion detection systems work at the kernel level
+- **Home lab security** — monitor sensitive directories on a personal Linux server
+- **Academic projects** — cybersecurity FYP or coursework demonstration
+- **Security tooling demos** — showcase real-time file monitoring with a polished UI
+- **CTF infrastructure** — detect unexpected file changes on competition servers
+
 ---
  
 ## Author
