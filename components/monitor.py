@@ -21,23 +21,104 @@ from .utils import (
     add_settings_audit,
 )
 
-# Module-level state
+
 _lock = threading.RLock()
 _wm = None
 _notifier = None
 _handler = None
-_baseline = None          # in-memory baseline: {path: attrs} — ORIGINAL snapshot, never overwritten on change
-_watched_paths = {}       # path -> watch descriptor
+_baseline = None         
+_watched_paths = {}      
 _mask = None
 _scanning_paths = set()
 
-# Debounce: track last alert time per path to avoid event storms on rapidly-written files
 _last_alert_time = {}
 _DEBOUNCE_SECONDS = 1.0
 
+_seen_alert_keys: set = set()
+_seen_lock = threading.Lock()
+
+
+def _make_alert_key(internal_et: str, path: str, attrs: dict | None) -> str:
+    a = attrs or {}
+    file_hash = a.get("hash") or ""
+    mode      = a.get("mode") or ""
+    owner     = a.get("owner") or ""
+
+    et = "alert_changed" if internal_et == "alert_initial_change" else internal_et
+
+    return f"{et}|{path}|{file_hash}|{mode}|{owner}"
+
+
+def _load_seen_keys_from_db():
+    global _seen_alert_keys
+    import json
+    import sqlite3
+    from .utils import DB_FILE
+
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute(
+            "SELECT message, details FROM logs "
+            "WHERE event_type = 'alert' ORDER BY id DESC LIMIT 50000"
+        )
+        rows = c.fetchall()
+        conn.close()
+
+        new_keys: set = set()
+        for message, details_json in rows:
+            details: dict = {}
+            if details_json:
+                try:
+                    details = json.loads(details_json)
+                except Exception:
+                    pass
+
+            path     = details.get("path") or details.get("new_path") or ""
+            new_attrs = details.get("new") or {}
+            old_attrs = details.get("old") or {}
+
+            if "Changed:" in message or "Initial change" in message:
+                et = "alert_changed"
+            elif "New/untracked:" in message or "New file:" in message or "New directory:" in message:
+                et = "alert_new"
+            elif "Deleted" in message:
+                et = "alert_deleted"
+            elif "Renamed" in message or "Moved" in message:
+                et = "alert_moved"
+            else:
+                et = "alert_other"
+
+            attrs_for_key = new_attrs if new_attrs else old_attrs
+            new_keys.add(_make_alert_key(et, path, attrs_for_key))
+
+        with _seen_lock:
+            _seen_alert_keys = new_keys
+
+    except Exception:
+        with _seen_lock:
+            _seen_alert_keys = set()
+
+
+def _check_and_record_alert(
+    internal_et: str,
+    path: str,
+    attrs: dict | None,
+    message: str,
+    details: dict | None,
+) -> bool:
+    key = _make_alert_key(internal_et, path, attrs)
+    with _seen_lock:
+        if key in _seen_alert_keys:
+            return False
+        _seen_alert_keys.add(key)
+    add_alert(message, details=details, event_type="alert")
+    return True
+
+
+
 
 def _debounce(path):
-    """Return True if we should skip this event (too soon after last alert for same path)."""
     now = time.time()
     last = _last_alert_time.get(path, 0)
     if now - last < _DEBOUNCE_SECONDS:
@@ -91,7 +172,6 @@ def compare_attributes(old_attrs, new_attrs):
 
 
 def _classify_event(old_attrs, new_attrs):
-    """Return the most appropriate event type string based on what changed."""
     if not old_attrs or not new_attrs:
         return 'modified'
     changed = [k for k in old_attrs if old_attrs.get(k) != new_attrs.get(k)]
@@ -133,12 +213,6 @@ def _recursive():
 
 
 def initial_scan(path_or_dir, baseline, save_after=None):
-    """
-    Scan a file or directory.
-    - Adds new files to baseline and records a 'baseline' snapshot in file_history.
-    - If a file already has a baseline entry, compares and logs any drift (but does NOT
-      overwrite the original baseline — the original is preserved).
-    """
     start_time = time.time()
 
     def _scan_one(path):
@@ -146,7 +220,6 @@ def initial_scan(path_or_dir, baseline, save_after=None):
         if not new_attrs:
             return
         if path not in baseline:
-            # New file: establish baseline and record in history
             baseline[path] = new_attrs
             update_baseline_entry(path, new_attrs)
             add_file_history(path, 'baseline', new_attrs)
@@ -154,23 +227,20 @@ def initial_scan(path_or_dir, baseline, save_after=None):
                       details={'path': path, 'new': new_attrs},
                       event_type='info')
         else:
-            # File already baselined — check for drift but keep original baseline intact
             old_attrs = baseline[path]
             changes = compare_attributes(old_attrs, new_attrs)
             if changes:
                 event_type_str = _classify_event(old_attrs, new_attrs)
                 add_file_history(path, event_type_str, new_attrs)
-                add_alert(
+                _check_and_record_alert(
+                    "alert_initial_change", path, new_attrs,
                     f"Initial change in {path}: {changes}",
-                    details={'path': path, 'old': old_attrs, 'new': new_attrs},
-                    event_type='alert'
+                    {'path': path, 'old': old_attrs, 'new': new_attrs}
                 )
-                # Do NOT update baseline[path] — original baseline is preserved
 
     if os.path.isfile(path_or_dir):
         _scan_one(path_or_dir)
-        do_save = save_after if save_after is not None else False
-        if do_save:
+        if save_after:
             save_baseline(baseline)
         add_alert(f"Initial scan done in {time.time() - start_time:.2f}s", event_type='info')
         return
@@ -194,8 +264,7 @@ def initial_scan(path_or_dir, baseline, save_after=None):
     for path in paths:
         _scan_one(path)
 
-    do_save = save_after if save_after is not None else False
-    if do_save:
+    if save_after:
         save_baseline(baseline)
     add_alert(f"Initial scan done in {time.time() - start_time:.2f}s", event_type='info')
 
@@ -311,14 +380,13 @@ class EventHandler(pyinotify.ProcessEvent):
         new_attrs = get_file_attributes(event.pathname)
         if new_attrs:
             type_str = "directory" if event.dir else "file"
-            # New file: add to baseline and record history
             self.baseline[event.pathname] = new_attrs
             update_baseline_entry(event.pathname, new_attrs)
             add_file_history(event.pathname, 'created', new_attrs)
-            add_alert(
+            _check_and_record_alert(
+                "alert_new", event.pathname, new_attrs,
                 f"New {type_str}: {event.pathname}",
-                details={'path': event.pathname, 'new': new_attrs},
-                event_type='alert'
+                {'path': event.pathname, 'new': new_attrs}
             )
 
     def process_IN_DELETE(self, event):
@@ -332,8 +400,11 @@ class EventHandler(pyinotify.ProcessEvent):
             type_str = "directory" if event.dir else ""
             msg = f"Deleted{' ' + type_str if type_str else ''}: {path}"
             add_file_history(path, 'deleted', old_attrs)
-            add_alert(msg, details={'path': path, 'old': old_attrs}, event_type='alert')
-            # Remove from in-memory baseline only (original DB baseline preserved for history)
+            _check_and_record_alert(
+                "alert_deleted", path, old_attrs,
+                msg,
+                {'path': path, 'old': old_attrs}
+            )
             del self.baseline[path]
 
     def process_IN_MOVED_FROM(self, event):
@@ -353,7 +424,11 @@ class EventHandler(pyinotify.ProcessEvent):
                 old_attrs = self.baseline[old_path]
                 msg = f"Moved outside{' directory' if is_dir else ''}: {old_path}"
                 add_file_history(old_path, 'moved', old_attrs)
-                add_alert(msg, details={'path': old_path, 'old': old_attrs}, event_type='alert')
+                _check_and_record_alert(
+                    "alert_moved", old_path, old_attrs,
+                    msg,
+                    {'path': old_path, 'old': old_attrs}
+                )
                 del self.baseline[old_path]
             if is_dir:
                 to_remove = [k for k in self.baseline if k.startswith(old_path + '/')]
@@ -385,13 +460,12 @@ class EventHandler(pyinotify.ProcessEvent):
                 msg = f"Renamed{' directory' if is_dir else ''}: {old_path} → {new_path}"
                 if changes:
                     msg += f" and changed ({changes})"
-                event_type_str = _classify_event(old_attrs, new_attrs) if changes else 'moved'
                 add_file_history(new_path, 'moved', new_attrs)
-                add_alert(
+                _check_and_record_alert(
+                    "alert_moved", new_path, new_attrs,
                     msg,
-                    details={'old_path': old_path, 'new_path': new_path,
-                             'old': old_attrs, 'new': new_attrs},
-                    event_type='alert'
+                    {'old_path': old_path, 'new_path': new_path,
+                     'old': old_attrs, 'new': new_attrs}
                 )
                 self.baseline[new_path] = new_attrs
                 update_baseline_entry(new_path, new_attrs)
@@ -411,11 +485,6 @@ class EventHandler(pyinotify.ProcessEvent):
                 initial_scan(new_path, self.baseline)
 
     def check_integrity(self, path):
-        """
-        Compare current file state against original baseline.
-        IMPORTANT: The original baseline entry is NEVER overwritten here.
-        Every change is appended to file_history instead.
-        """
         new_attrs = get_file_attributes(path)
         if not new_attrs:
             return
@@ -425,27 +494,22 @@ class EventHandler(pyinotify.ProcessEvent):
             if changes:
                 event_type_str = _classify_event(old, new_attrs)
                 add_file_history(path, event_type_str, new_attrs)
-                add_alert(
+                _check_and_record_alert(
+                    "alert_changed", path, new_attrs,
                     f"Changed: {path} ({changes})",
-                    details={'path': path, 'old': old, 'new': new_attrs},
-                    event_type='alert'
+                    {'path': path, 'old': old, 'new': new_attrs}
                 )
-                # Do NOT update self.baseline[path] — original baseline is preserved
         else:
-            # Untracked file appeared
             add_file_history(path, 'created', new_attrs)
-            add_alert(
+            _check_and_record_alert(
+                "alert_new", path, new_attrs,
                 f"New/untracked: {path}",
-                details={'path': path, 'new': new_attrs},
-                event_type='alert'
+                {'path': path, 'new': new_attrs}
             )
             self.baseline[path] = new_attrs
             update_baseline_entry(path, new_attrs)
 
 
-# ---------------------------------------------------------------------------
-# Monitor control
-# ---------------------------------------------------------------------------
 
 def get_monitor_state():
     with _lock:
@@ -475,7 +539,6 @@ def _do_scan_then_clear(path):
 
 
 def add_monitored_path(path, who='admin'):
-    """Add a path to monitoring, establish its baseline immediately."""
     path = os.path.abspath(path)
     if not os.path.exists(path):
         return False, 'Path does not exist.'
@@ -498,7 +561,6 @@ def add_monitored_path(path, who='admin'):
                 _scanning_paths.discard(path)
                 add_alert(f"Failed to watch {path}: {e}", event_type='info')
                 return False, str(e)
-            # Run initial_scan in background thread to build baseline immediately
             t = threading.Thread(target=_do_scan_then_clear, args=(path,), daemon=True)
             t.start()
         else:
@@ -527,7 +589,6 @@ def remove_monitored_path(path, who='admin'):
 
 
 def run_monitor_loop():
-    """Main loop: run notifier when active, sleep when paused."""
     global _wm, _notifier, _handler, _baseline, _mask, _watched_paths
     init_db()
     _mask = (
@@ -547,13 +608,15 @@ def run_monitor_loop():
                     _wm = None
                     _handler = None
                     _baseline = None
-                    _watched_paths = {}      # safe: we declared global above
+                    _watched_paths = {}
             time.sleep(1)
 
         paths = get_config('monitored_paths') or []
         if not paths:
             time.sleep(2)
             continue
+
+        _load_seen_keys_from_db()
 
         with _lock:
             _baseline = load_baseline()
@@ -590,7 +653,6 @@ def run_monitor_loop():
 
 
 def run_monitor(directory):
-    """Legacy CLI entry point."""
     paths = get_config('monitored_paths') or []
     if directory and directory not in paths:
         paths = list(paths) + [os.path.abspath(directory)]
@@ -602,7 +664,6 @@ def run_monitor(directory):
 
 
 def create_baseline(who='admin'):
-    """Clear baseline and rebuild from all monitored paths."""
     paths = get_config('monitored_paths') or []
     clear_baseline()
     baseline = {}
@@ -625,7 +686,6 @@ def reset_baseline(who='admin'):
 def restart_service(who='admin'):
     global _baseline, _wm, _notifier, _handler, _watched_paths
     stop_notifier()
-    # Clear in-memory state so dashboard reads 0 files immediately
     with _lock:
         if _baseline is not None:
             _baseline.clear()
@@ -635,6 +695,8 @@ def restart_service(who='admin'):
         _handler = None
         _watched_paths = {}
         _last_alert_time.clear()
+        with _seen_lock:
+            _seen_alert_keys.clear()
     init_db()
     ok = clear_all_except_account()
     if ok:
