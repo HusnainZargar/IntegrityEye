@@ -127,12 +127,13 @@ journalctl -u fim -f        # live logs
 │       ├── dashboard.html
 │       ├── alerts.html
 │       ├── logs.html
+│       ├── change_password.html
 │       ├── file_analysis.html
 │       ├── statistics.html
 │       ├── settings.html
 │       ├── account.html
 │       └── login.html
-└── Project-Proposal.pdf
+
 ```
  
 ---
